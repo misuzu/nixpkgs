@@ -201,15 +201,40 @@ fi
 # exists (i.e. when mutable user accounts are enabled).
 if [[ -z $noRootPasswd ]] && [ -t 0 ]; then
     if nixos-enter --root "$mountPoint" -c 'test -e /nix/var/nix/profiles/system/sw/bin/passwd'; then
-        set +e
-        nixos-enter --root "$mountPoint" -c 'echo "setting root password..." && /nix/var/nix/profiles/system/sw/bin/passwd'
-        exit_code=$?
-        set -e
 
-        if [[ $exit_code != 0 ]]; then
-            echo "Setting a root password failed with the above printed error."
-            echo "You can set the root password manually by executing \`nixos-enter --root ${mountPoint@Q}\` and then running \`passwd\` in the shell of the new system."
-            exit $exit_code
+        # Get users without password.
+        # If `mutableUsers` is `false`, this variable is empty.
+        # If `users-groups.json` doesn't exist or invalid, this variable is set to `root`.
+        usersWithoutPassword=$(jq -Mr '
+            if .mutableUsers then .users else [] end |
+            map(select(
+                (.isNormalUser or .name == "root") and
+                .hashedPassword == null and
+                .initialHashedPassword == null and
+                .initialPassword == null and
+                .password == null and
+                .passwordFile == null)) |
+            .[] | .name' "$mountPoint$(readlink -f $mountPoint$system/users-groups.json)" 2> /dev/null || echo root)
+
+        if [[ ! -z "$usersWithoutPassword" ]]; then
+            passwd_exit_code=0
+
+            for user in $usersWithoutPassword; do
+                set +e
+                nixos-enter --root "$mountPoint" -c "echo \"setting $user password...\" && /nix/var/nix/profiles/system/sw/bin/passwd $user"
+                exit_code=$?
+                set -e
+
+                if [[ $exit_code != 0 ]]; then
+                    echo "Setting a $user password failed with the above printed error."
+                    echo "You can set the $user password manually by executing \`nixos-enter --root ${mountPoint@Q}\` and then running \`passwd $user\` in the shell of the new system."
+                    passwd_exit_code=$exit_code
+                fi
+            done
+
+            if [[ $passwd_exit_code != 0 ]]; then
+                exit $passwd_exit_code
+            fi
         fi
     fi
 fi
