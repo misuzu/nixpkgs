@@ -64,6 +64,9 @@ while [ "$#" -gt 0 ]; do
         --no-bootloader)
             noBootLoader=1
             ;;
+        --no-interaction)
+            noInteraction=1
+            ;;
         --show-trace|--impure|--keep-going)
             extraBuildFlags+=("$i")
             ;;
@@ -198,7 +201,7 @@ if [[ -z $noBootLoader ]]; then
 fi
 
 # Do not ask to set passwords if stdin is unavailable
-if [ -t 0 ]; then
+if [[ -z $noInteraction ]] && [ -t 0 ]; then
     # Ask the user to set passwords, but only if the passwd command
     # exists (i.e. when mutable user accounts are enabled).
     if nixos-enter --root "$mountPoint" -c 'test -e /nix/var/nix/profiles/system/sw/bin/passwd'; then
