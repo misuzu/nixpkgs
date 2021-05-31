@@ -200,8 +200,20 @@ if [[ -z $noBootLoader ]]; then
     NIXOS_INSTALL_BOOTLOADER=1 nixos-enter --root "$mountPoint" -- /run/current-system/bin/switch-to-configuration boot
 fi
 
+confirm() {
+    local ans IFS=
+    while read -rp "$1 (Y/n) " -n1 ans; do
+        printf '\n'
+        case $ans in
+            "")   return 0 ;;
+            [Yy]) return 0 ;;
+            [Nn]) return 1 ;;
+        esac
+    done
+}
+
 # Do not ask to set passwords if stdin is unavailable
-if [[ -z $noInteraction ]] && [ -t 0 ]; then
+if [[ -z $noInteraction && -t 0 ]]; then
     # Ask the user to set passwords, but only if the passwd command
     # exists (i.e. when mutable user accounts are enabled).
     if nixos-enter --root "$mountPoint" -c 'test -e /nix/var/nix/profiles/system/sw/bin/passwd'; then
@@ -223,29 +235,14 @@ if [[ -z $noInteraction ]] && [ -t 0 ]; then
         if [[ ! -z "$usersWithoutPassword" ]]; then
             passwd_exit_code=0
 
-            echo "found the following users without passwords:" $usersWithoutPassword
+            echo "Found the following users without passwords:" $usersWithoutPassword
 
             for user in $usersWithoutPassword; do
-                if [[ ! -z $noRootPasswd && $user == "root" ]]; then
+                if [[ -n $noRootPasswd && $user == "root" ]]; then
                     continue
                 fi
 
-                echo "do you want to set password for $user?"
-
-                PS3="enter a number: "
-                select yn in "Yes" "No"; do
-                    case $yn in
-                        Yes)
-                            break
-                            ;;
-                        No)
-                            unset user
-                            break
-                            ;;
-                    esac
-                done
-
-                if [[ -z "$user" ]]; then
+                if ! confirm "Do you want to set password for $user?"; then
                     continue
                 fi
 
